@@ -52,31 +52,39 @@ app.get('/', (req, res) => {
   res.json({ message: 'Floating IQ Backend API', status: 'running' });
 });
 
-// Chat endpoint - handles OpenAI chat completions
+// Chat endpoint - handles OpenAI chat completions with streaming
 app.post('/api/chat', async (req, res) => {
   try {
-    const { messages, model = 'gpt-3.5-turbo' } = req.body;
+    const { messages, model = 'gpt-4o-mini' } = req.body;
 
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'Messages array is required' });
     }
 
-    const completion = await openai.chat.completions.create({
+    // Set headers for SSE streaming
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const stream = await openai.chat.completions.create({
       model: model,
       messages: messages,
+      stream: true,
     });
 
-    res.json({
-      success: true,
-      response: completion.choices[0].message.content,
-      usage: completion.usage
-    });
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || '';
+      if (content) {
+        res.write(`data: ${JSON.stringify({ content })}\n\n`);
+      }
+    }
+
+    res.write('data: [DONE]\n\n');
+    res.end();
   } catch (error) {
     console.error('OpenAI API error:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
+    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    res.end();
   }
 });
 

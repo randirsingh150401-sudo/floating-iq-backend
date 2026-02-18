@@ -10,12 +10,20 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Backend API server for the Floating IQ Electron app. This server handles OpenAI chat completions and MongoDB data storage.",
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
     "mongoose": "^9.2.1",
     "openai": "^6.21.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/randirsingh150401-sudo/floating-iq-backend.git"
+  },
+  "bugs": {
+    "url": "https://github.com/randirsingh150401-sudo/floating-iq-backend/issues"
+  },
+  "homepage": "https://github.com/randirsingh150401-sudo/floating-iq-backend#readme"
 }
