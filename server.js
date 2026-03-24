@@ -9,7 +9,8 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // MongoDB Connection
 const connectDB = async () => {
@@ -105,16 +106,34 @@ app.post('/api/save-history', async (req, res) => {
 
     await history.save();
 
-    res.json({ 
-      success: true, 
+    let newTitle = null;
+
+    // Auto-title the session from the first user message
+    if (role === 'user') {
+      const session = await Session.findById(sessionId);
+      if (session && session.title === 'New Chat') {
+        const msgCount = await History.countDocuments({ sessionId, role: 'user' });
+        if (msgCount === 1) {
+          // First user message — generate title from content
+          const rawTitle = typeof content === 'string' ? content : JSON.stringify(content);
+          newTitle = rawTitle.replace(/\s+/g, ' ').trim().slice(0, 40);
+          if (rawTitle.length > 40) newTitle += '…';
+          await Session.findByIdAndUpdate(sessionId, { title: newTitle, updatedAt: Date.now() });
+        }
+      }
+    }
+
+    res.json({
+      success: true,
       message: 'History saved successfully',
-      historyId: history._id
+      historyId: history._id,
+      ...(newTitle && { newTitle })
     });
   } catch (error) {
     console.error('Save history error:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
@@ -126,15 +145,15 @@ app.get('/api/history/:sessionId', async (req, res) => {
 
     const history = await History.find({ sessionId }).sort({ timestamp: 1 });
 
-    res.json({ 
-      success: true, 
-      history 
+    res.json({
+      success: true,
+      history
     });
   } catch (error) {
     console.error('Fetch history error:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
@@ -155,15 +174,15 @@ app.post('/api/sessions', async (req, res) => {
 
     await session.save();
 
-    res.json({ 
-      success: true, 
-      session 
+    res.json({
+      success: true,
+      session
     });
   } catch (error) {
     console.error('Create session error:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
@@ -175,15 +194,75 @@ app.get('/api/sessions/:userId', async (req, res) => {
 
     const sessions = await Session.find({ userId }).sort({ updatedAt: -1 });
 
-    res.json({ 
-      success: true, 
-      sessions 
+    res.json({
+      success: true,
+      sessions
     });
   } catch (error) {
     console.error('Fetch sessions error:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Update session title
+app.patch('/api/sessions/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { title } = req.body;
+
+    if (!title) {
+      return res.status(400).json({ error: 'title is required' });
+    }
+
+    const session = await Session.findByIdAndUpdate(
+      sessionId,
+      { title, updatedAt: Date.now() },
+      { new: true }
+    );
+
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    res.json({
+      success: true,
+      session
+    });
+  } catch (error) {
+    console.error('Update session error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Delete a session and its history
+app.delete('/api/sessions/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    const session = await Session.findByIdAndDelete(sessionId);
+
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Also delete all history associated with this session
+    await History.deleteMany({ sessionId });
+
+    res.json({
+      success: true,
+      message: 'Session and its history deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete session error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
